@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: ai-service
+  config:
+    import: optional:configserver:http://localhost:8888,optional:file:./.env[.properties],optional:file:../.env[.properties]
+
+  mongodb:
+    uri: ${MONGODB_URI}
+    database: airecommendationfitness
+
+# we did this key-deserializer and value-deserializer cause we will recieve data as key-value pair from kafka and have to deserialize
+# and kafka will store those data as key-value pair so key is String and value is JSON
+# activity {STRING}: <ACTIVITY> {OBJECT as JSON}
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: activity-processor-group # this is for consumer groups
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        # here we did false because when we are sending Activity Object from Activity Service then it will send the type com.fitness.activityservice.model
+        # but we don't want this type also so we will make this false cause we will define our type Activity
+        spring.json.use.type.headers: false
+        # This one is basically to map the object which is coming from the Kafka
+        spring.json.value.default.type: com.fitness.aiservice.model.Activity
+        spring.json.trusted.packages: "*"
+
+kafka:
+  topic:
+    name: activity-events
+
+
+gemini:
+  api:
+    url: ${GEMINI_URL}
+    key: ${GEMINI_KEY}
+    model: ${GEMINI_MODEL}
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/ # The URL where the Eureka Server is running
+  instance:
+    hostname: localhost # Avoid registering with machine hostname (e.g. ARUP.mshome.net) which DNS cannot resolve locally
+    instance-id: localhost:aiservice:8083
+
+server:
+  port: 8083

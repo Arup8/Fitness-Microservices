@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: eureka
+
+eureka:
+  client:
+    register-with-eureka: false # this means eureka shouldn't register himself in this eureka server registry
+    fetch-registry: false
+
+server:
+  port: 8761

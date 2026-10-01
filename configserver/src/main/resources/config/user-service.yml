@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${USER_DB_URL}
+    username: ${USER_DB_USERNAME}
+    password: ${USER_DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/ # The URL where the Eureka Server is running
+  instance:
+    hostname: localhost # Avoid registering with machine hostname (e.g. ARUP.mshome.net) which DNS cannot resolve locally
+    instance-id: localhost:user-service:8081
+
+server:
+  port: 8081

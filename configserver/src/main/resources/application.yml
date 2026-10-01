@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: configserver
+  config:
+    # local secrets (gitignored); works whether the working dir is the repo root or this module
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: classpath:/config
+
+server:
+  port: 8888
