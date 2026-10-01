@@ -2,5 +2,7 @@ spring:
   application:
     name: activity-service
   config:
-    import: optional:configserver:http://localhost:8888
+    # Local run: nothing to set, defaults point to localhost.
+    # Docker/server: set CONFIG_SERVER_URL=http://configserver:8888 (see docker-compose.yml).
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
 

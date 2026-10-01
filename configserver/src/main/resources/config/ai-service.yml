@@ -8,7 +8,7 @@ spring:
   # and kafka will store those data as key-value pair so key is String and value is JSON
   # activity {STRING}: <ACTIVITY> {OBJECT as JSON}
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} # Local: localhost:9092. Docker/server: set KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     consumer:
       group-id: activity-processor-group # this is for consumer groups
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -36,9 +36,11 @@ gemini:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/ # The URL where the Eureka Server is running
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/} # Local: localhost. Docker/server: set EUREKA_URL=http://eureka:8761/eureka/
   instance:
     hostname: localhost # Avoid registering with machine hostname (e.g. ARUP.mshome.net) which DNS cannot resolve locally
+    # Local: false (register as localhost). Docker/server: set EUREKA_PREFER_IP=true so other containers reach this one by container IP.
+    prefer-ip-address: ${EUREKA_PREFER_IP:false}
     instance-id: localhost:ai-service:8083
 
 server:

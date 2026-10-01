@@ -1,0 +1,157 @@
+# Fitness microservices - full backend stack.
+#   cp .env.example .env   (fill in real values)
+#   docker compose up -d --build
+# Gateway: http://localhost:8080   Eureka dashboard: http://localhost:8761   Keycloak: http://localhost:8181
+#
+# Optional local Postgres instead of the hosted one:  docker compose --profile local-db up -d --build
+# (then set USER_DB_URL=jdbc:postgresql://postgres:5432/fitness_micro_user in .env)
+
+x-service-env: &service-env
+  # Same values for every Spring service; Spring reads these via ${VAR:default} placeholders in the yml files.
+  CONFIG_SERVER_URL: http://configserver:8888
+  EUREKA_URL: http://eureka:8761/eureka/
+  EUREKA_PREFER_IP: "true"   # register by container IP so other containers can reach us
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+services:
+  # ---------- Infrastructure ----------
+  kafka:
+    image: apache/kafka:4.0.0
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    mem_limit: 1g
+    # start-dev = H2 database in the volume, fine for a single small server. For real production use Postgres + `start`.
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8181:8080"   # same port the frontend already uses locally
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
+
+  postgres:
+    image: postgres:17
+    profiles: ["local-db"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fitness_micro_user
+      POSTGRES_USER: ${USER_DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # ---------- Platform services ----------
+  configserver:
+    build: ./configserver
+    restart: unless-stopped
+    mem_limit: 512m
+    # The config server resolves ${...} in the yml files it serves, so it needs ALL the shared values.
+    environment:
+      <<: *service-env
+      KEYCLOAK_JWK_URI: http://keycloak:8080/realms/fitness-app/protocol/openid-connect/certs
+      USER_DB_URL: ${USER_DB_URL:?set USER_DB_URL in .env}
+      USER_DB_USERNAME: ${USER_DB_USERNAME:?set USER_DB_USERNAME in .env}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set USER_DB_PASSWORD in .env}
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8888'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+
+  eureka:
+    build: ./eureka
+    restart: unless-stopped
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:8761:8761"   # dashboard, reachable only from this machine
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8761'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+
+  # ---------- Business services ----------
+  userservice:
+    build: ./userservice
+    restart: unless-stopped
+    mem_limit: 640m
+    environment: *service-env
+    depends_on:
+      configserver: { condition: service_healthy }
+      eureka: { condition: service_healthy }
+
+  activityservice:
+    build: ./activityservice
+    restart: unless-stopped
+    mem_limit: 640m
+    environment: *service-env
+    depends_on:
+      configserver: { condition: service_healthy }
+      eureka: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  aiservice:
+    build: ./aiservice
+    restart: unless-stopped
+    mem_limit: 640m
+    environment:
+      <<: *service-env
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+      GEMINI_URL: ${GEMINI_URL:?set GEMINI_URL in .env}
+      GEMINI_KEY: ${GEMINI_KEY:?set GEMINI_KEY in .env}
+      GEMINI_MODEL: ${GEMINI_MODEL:?set GEMINI_MODEL in .env}
+    depends_on:
+      configserver: { condition: service_healthy }
+      eureka: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  gateway:
+    build: ./gateway
+    restart: unless-stopped
+    mem_limit: 640m
+    environment:
+      <<: *service-env
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8080:8080"   # the only business entry point
+    depends_on:
+      configserver: { condition: service_healthy }
+      eureka: { condition: service_healthy }
+      keycloak: { condition: service_started }
+
+volumes:
+  kafka-data:
+  keycloak-data:
+  postgres-data:

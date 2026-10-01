@@ -1,9 +1,11 @@
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/} # Local: localhost. Docker/server: set EUREKA_URL=http://eureka:8761/eureka/
   instance:
     hostname: localhost # Avoid registering with machine hostname (e.g. ARUP.mshome.net) which DNS cannot resolve locally
+    # Local: false (register as localhost). Docker/server: set EUREKA_PREFER_IP=true so other containers reach this one by container IP.
+    prefer-ip-address: ${EUREKA_PREFER_IP:false}
     instance-id: localhost:gateway-service:8080
 
 
@@ -12,7 +14,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: http://localhost:8181/realms/fitness-app/protocol/openid-connect/certs
+          # Local: Keycloak on localhost:8181. Docker/server: set KEYCLOAK_JWK_URI=http://keycloak:8080/realms/fitness-app/protocol/openid-connect/certs
+          jwk-set-uri: ${KEYCLOAK_JWK_URI:http://localhost:8181/realms/fitness-app/protocol/openid-connect/certs}
 
   cloud:
     gateway:
